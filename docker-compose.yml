@@ -1,0 +1,67 @@
+services:
+    backend:
+        container_name: ${APP_NAME}_back
+        build:
+            context: .docker
+            dockerfile: php.dockerfile
+            args:
+                - UID=${UID:-1000}
+                - GID=${GID:-1000}
+        ports:
+            - "${FORWARD_PHP_PORT:-9000}:9000"
+        volumes:
+            - ./www:/var/www:delegated
+            - ./.docker/config/custom.ini:/usr/local/etc/php/conf.d/custom.ini
+        networks:
+            - currency-network
+        restart: unless-stopped
+
+    webserver:
+        container_name: ${APP_NAME}_webserver
+        build:
+            context: .docker
+            dockerfile: nginx.dockerfile
+            args:
+                - UID=${UID:-1000}
+                - GID=${GID:-1000}
+        ports:
+            - "${FORWARD_NGINX_PORT:-8888}:80"
+        volumes:
+            - ./www:/var/www:delegated
+            - ./.docker/nginx/conf.d:/etc/nginx/conf.d/
+        depends_on:
+            - backend
+            - db
+        networks:
+            - currency-network
+        restart: unless-stopped
+
+    db:
+        image: postgres:latest
+        container_name: "db"
+        environment:
+            POSTGRES_DB: ${DB_DATABASE}
+            POSTGRES_USER: ${DB_USERNAME}
+            POSTGRES_PASSWORD: ${DB_PASSWORD}
+            PGDATA: /data/postgres
+            TZ: Asia/Tashkent
+        healthcheck:
+            test: [ "CMD-SHELL", "pg_isready -d ${DB_DATABASE} -U ${DB_USERNAME}" ]
+            interval: 5s
+            timeout: 5s
+            retries: 5
+        volumes:
+            - db:/data/postgres
+        ports:
+            - "${DB_PORT:-5432}:5432"
+        networks:
+            - currency-network
+        restart: unless-stopped
+
+volumes:
+    db:
+        driver: local
+
+networks:
+    currency-network:
+        driver: bridge
